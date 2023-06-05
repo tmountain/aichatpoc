@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Spanish Teacher Bot</title>
+  </head>
+  <body>
+    <h1>Spanish Teacher Bot</h1>
+    <div id="conversation"></div>
+    <button id="startButton">Start Mic</button>
+    <button id="stopButton">Stop Mic</button>
+    <button id="langButton">Spanish</button>
+    <script>
+      document.addEventListener('DOMContentLoaded', () => {
+        const conversationElement = document.getElementById('conversation');
+        const startButton = document.getElementById('startButton');
+        const stopButton = document.getElementById('stopButton');
+        const langButton = document.getElementById('langButton');
+        let conversationContext = [];
+        let lang = 'es-ES';
+
+        const recognition = new webkitSpeechRecognition();
+        recognition.continuous = true;
+        recognition.interimResults = true;
+        recognition.lang = lang;
+        // auto restart recognition after it has finished
+        recognition.addEventListener('end', () => {
+          recognition.start();
+        });
+
+        startButton.addEventListener('click', () => {
+          console.log('Starting conversation');
+          startConversation();
+        });
+
+        stopButton.addEventListener('click', () => {
+          recognition.stop();
+          startButton.disabled = false;
+          stopButton.disabled = true;
+        });
+
+        langButton.addEventListener('click', () => {
+          if (lang === 'es-ES') {
+            lang = 'en-US';
+            langButton.textContent = 'English';
+          } else {
+            lang = 'es-ES';
+            langButton.textContent = 'Spanish';
+          }
+          recognition.stop();
+          recognition.lang = lang;
+          recognition.start();
+        });
+
+        function speak(message, lang) {
+          const utterance = new SpeechSynthesisUtterance(message);
+          utterance.lang = lang;
+          speechSynthesis.speak(utterance);
+        }
+
+        function startConversation() {
+          startButton.disabled = true;
+          stopButton.disabled = false;
+          addMessage('Profesor: ¡Hola! Estoy aquí para ayudarte con tu español. ¿Cómo estás?');
+          window.speechSynthesis.onvoiceschanged = () => {
+            const utterance = new SpeechSynthesisUtterance(
+              '¡Hola! Estoy aquí para ayudarte con tu español. ¿Cómo estás?'
+            );
+            utterance.lang = 'es-ES';
+            speechSynthesis.speak(utterance);
+          };
+          conversationContext = [];
+          recognition.start();
+        }
+
+        recognition.onresult = (event) => {
+          const lastResult = event.results[event.results.length - 1];
+          const speechResult = lastResult[0].transcript;
+
+          // Only add the user's speech and send it to the server if it's the final result
+          if (lastResult.isFinal) {
+            addMessage('Usuario: ' + speechResult);
+
+            const requestBody = {
+              message: speechResult,
+              conversationContext: conversationContext
+            };
+
+            fetch('/message', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify(requestBody),
+            })
+              .then((response) => response.json())
+              .then((data) => {
+                const botResponse = data.message;
+                if (botResponse && botResponse.trim() !== '') {
+                  conversationContext = data.conversationContext;
+                  console.log('Conversation context:', conversationContext);
+                  addMessage(`Profesor: ${botResponse}`);
+                  speak(botResponse, lang);
+                }
+              })
+              .catch((error) => console.error('Error:', error));
+          }
+        };
+
+        function addMessage(message) {
+          const messageElement = document.createElement('p');
+          messageElement.textContent = message;
+          conversationElement.appendChild(messageElement);
+        }
+      });
+    </script>
+  </body>
+</html>
